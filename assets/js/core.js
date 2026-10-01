@@ -66,7 +66,6 @@ const PADDOCK_URL = 'https://pchattani.github.io/the-quant-paddock/';
 const HARDWOOD_URL = 'https://pchattani.github.io/the-quant-hardwood/';
 const ACE_URL = 'https://pchattani.github.io/the-quant-ace/';
 const BULLPEN_URL = 'https://pchattani.github.io/the-quant-bullpen/';
-const RINK_URL = 'https://pchattani.github.io/the-quant-rink/';
 const SITE = 'The Quant Gridiron';
 const FIRST_SEASON = 1999;
 
@@ -1322,7 +1321,7 @@ return {
   splitBar: splitBar, divColour: divColour, seqColour: seqColour, toggles: toggles, wireToggles: wireToggles, pageHead: pageHead, weekNav: weekNav,
   // charts
   plot: plot, layout: layout, PALETTE: PALETTE, C: C, DARK_LAYOUT: DARK_LAYOUT, PLOTLY_CONF: PLOTLY_CONF,
-  FOOTBALL_URL: FOOTBALL_URL, PADDOCK_URL: PADDOCK_URL, HARDWOOD_URL: HARDWOOD_URL, ACE_URL: ACE_URL, BULLPEN_URL: BULLPEN_URL, RINK_URL: RINK_URL,
+  FOOTBALL_URL: FOOTBALL_URL, PADDOCK_URL: PADDOCK_URL, HARDWOOD_URL: HARDWOOD_URL, ACE_URL: ACE_URL, BULLPEN_URL: BULLPEN_URL,
   charts: {}
 };
 })();
