@@ -361,7 +361,7 @@ function fourthTable(g, fd) {
   });
   return GI.card('Fourth downs', fd.length + ' decision' + (fd.length === 1 ? '' : 's') + ' · graded by win probability lost against the best option · <a href="#/fourth-downs">every 4th down this season →</a>',
     GI.tableHTML(cols, rows, { cls: 'fd-table', compact: true }) +
-    '<div class="legend-row"><span><i class="legend-sw" style="background:' + GI.C.good + '"></i>Right call (&lt; 1 pp lost)</span><span><i class="legend-sw" style="background:' + GI.C.close + '"></i>Close (1–3 pp)</span><span><i class="legend-sw" style="background:' + GI.C.bad + '"></i>Mistake (&gt; 3 pp)</span></div>');
+    '<div class="legend-row"><span><i class="legend-sw" style="background:' + GI.C.good + '"></i>Right call (A–B, ≤ 1.5 pp lost)</span><span><i class="legend-sw" style="background:' + GI.C.close + '"></i>Close (C, 1.5–3 pp)</span><span><i class="legend-sw" style="background:' + GI.C.bad + '"></i>Mistake (D–F, &gt; 3 pp)</span></div>');
 }
 function keyPlaysBlock(g, kp) {
   if (!kp.length) return '';

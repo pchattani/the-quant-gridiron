@@ -66,6 +66,7 @@ const PADDOCK_URL = 'https://pchattani.github.io/the-quant-paddock/';
 const HARDWOOD_URL = 'https://pchattani.github.io/the-quant-hardwood/';
 const ACE_URL = 'https://pchattani.github.io/the-quant-ace/';
 const BULLPEN_URL = 'https://pchattani.github.io/the-quant-bullpen/';
+const RINK_URL = 'https://pchattani.github.io/the-quant-rink/';
 const SITE = 'The Quant Gridiron';
 const FIRST_SEASON = 1999;
 
@@ -649,8 +650,10 @@ function driveResult(r) {
   if (/half|game|period/.test(k)) return { label: titleCase(k), colour: '#484f58' };
   return { label: titleCase(k) || '—', colour: C.text3 };
 }
-/* A fourth-down decision grade -> {label, colour, key}: from a word ('correct'/'good', 'close'/'toss-up',
- * 'mistake'/'bad'/'wrong') or, given a number, the win probability lost (0-1): < 1 pp good, < 3 pp close, else bad. */
+/* A fourth-down decision grade -> {label, colour, key}: from the payload's letter (analytics/games.GRADE_CUTS:
+ * A <= 0.5 pp, B <= 1.5, C <= 3, D <= 6, F beyond; A/B right call, C close call, D/F mistake), a word ('correct'/'good',
+ * 'close'/'toss-up', 'mistake'/'bad'/'wrong') or, given a number, the win probability lost (0-1) on the same cut-offs:
+ * <= 1.5 pp right call, <= 3 pp close call, else mistake. */
 function gradeOf(g, wpLost) {
   const s = String(g === null || g === undefined ? '' : g).toLowerCase();
   if (/^(correct|good|right|right_call|agree|optimal|ok|a|b)$/.test(s)) return { key: 'good', label: 'Right call', colour: C.good };
@@ -659,8 +662,8 @@ function gradeOf(g, wpLost) {
   const x = isNum(wpLost) ? Number(wpLost) : (isNum(g) ? Number(g) : null);
   if (x === null) return { key: '', label: '—', colour: C.text3 };
   const a = Math.abs(x) > 1 ? Math.abs(x) / 100 : Math.abs(x);
-  if (a < 0.01) return { key: 'good', label: 'Right call', colour: C.good };
-  if (a < 0.03) return { key: 'close', label: 'Close call', colour: C.close };
+  if (a <= 0.015) return { key: 'good', label: 'Right call', colour: C.good };
+  if (a <= 0.03) return { key: 'close', label: 'Close call', colour: C.close };
   return { key: 'bad', label: 'Mistake', colour: C.bad };
 }
 function choiceLabel(c) {
@@ -1321,7 +1324,7 @@ return {
   splitBar: splitBar, divColour: divColour, seqColour: seqColour, toggles: toggles, wireToggles: wireToggles, pageHead: pageHead, weekNav: weekNav,
   // charts
   plot: plot, layout: layout, PALETTE: PALETTE, C: C, DARK_LAYOUT: DARK_LAYOUT, PLOTLY_CONF: PLOTLY_CONF,
-  FOOTBALL_URL: FOOTBALL_URL, PADDOCK_URL: PADDOCK_URL, HARDWOOD_URL: HARDWOOD_URL, ACE_URL: ACE_URL, BULLPEN_URL: BULLPEN_URL,
+  FOOTBALL_URL: FOOTBALL_URL, PADDOCK_URL: PADDOCK_URL, HARDWOOD_URL: HARDWOOD_URL, ACE_URL: ACE_URL, BULLPEN_URL: BULLPEN_URL, RINK_URL: RINK_URL,
   charts: {}
 };
 })();
