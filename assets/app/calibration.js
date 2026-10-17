@@ -1,27 +1,27 @@
-/* The Quant Gridiron — calibration (#/calibration): does the modelling hold up?
- *
- * 1. The game model against the closing line, walk-forward 2006 on: log-loss, Brier and reliability of
- *    the win probability against the de-vigged closing moneyline (and simple baselines); the spread
- *    against the closing spread (mean absolute error of the margin, against-the-spread calibration and
- *    the record of the model's side); totals; and season odds (playoffs, division, Super Bowl).
- * 2. Our expected points and win probability against nflfastR's published values on the same plays.
- * 3. The fourth-down conversion model.
- * Every sentence of "What it shows" is computed from the numbers, and a difference smaller than the
- * noise is called a tie.
- *
- * Data: data/calibration.json, written from builder C's backtest (models/backtest.py) and builder B's
- * validation blocks. The readers accept the shapes those modules write: scorer blocks {n, logloss, brier,
- * calibration: {bins: [[mid, mean_pred, mean_obs, n]], ece}} (or reliability: [{mean_p, freq, n}]),
- * splits {all, pre_2020, from_2020, by_season: {S: {n, ours, wp, vegas_wp}}, by_quarter}. Uses GI.fk. */
+/* The Quant Gridiron — Calibration (#/model, #/calibration), first view of the Model section.
+ * Does the modelling hold up? The game model against the closing line (walk-forward from 2006): log-loss,
+ * Brier and reliability against the de-vigged closing moneyline and simple baselines, the spread and totals;
+ * season odds; our expected points and win probability against nflfastR; the fourth-down conversion model.
+ * Every sentence of "What it shows" is computed from the numbers; a gap smaller than the noise is a tie.
+ * Ported from the old calibration.js through a small adapter (K) onto the kit's tables and charts.
+ * Reads calibration.json. */
 (function (GI) {
 'use strict';
 
-const K = () => GI.fk;
+const SHIM = {
+  isNum: GI.isNum, esc: GI.esc, num: GI.num, int: GI.int, pct: GI.pct, signed: GI.signed, first: GI.first, titleCase: GI.titleCase, set: GI.set, sortable: GI.sortable,
+  $: id => document.getElementById(id), fmtDate: GI.fmtDate, PALETTE: GI.PALETTE, ACC: '#3987e5',
+  ready: () => Promise.resolve(), alive: el => !!el && el.isConnected, ok: d => GI.ok(d), muted: t => GI.muted(t), card: (t, sub, body) => GI.card(GI.esc(t), sub, body),
+  tile: (l, v, sub) => GI.kpi(l, v, sub), tiles: list => GI.kpis(list.filter(Boolean)),
+  table: (cols, rows) => GI.tableHTML(cols, rows),
+  reliability: (id, series, o) => GI.ch.reliability(id, series, { minN: (o || {}).minN, min: (o || {}).min, max: (o || {}).max, xName: (o || {}).xt, yName: (o || {}).yt })
+};
+const K = () => SHIM;
 const LAB = { model_ratings_only: 'Ratings only', elo: 'Elo (FiveThirtyEight method)', market_ml: 'Closing moneyline', market_spread: 'Closing spread', ours: 'Ours', model: 'Game model', game_model: 'Game model', ours_common: 'Ours (same plays)', market: 'Closing line', close: 'Closing line', closing: 'Closing line', closing_line: 'Closing line',
   open: 'Opening line', ratings: 'Team ratings only', elo: 'Elo baseline', baseline: 'Baseline', home: 'Home-field only', coin: 'Coin flip', blend_50: '50/50 model and market',
   nflfastr: 'nflfastR', nflfastr_wp: 'nflfastR wp', nflfastr_vegas_wp: 'nflfastR vegas_wp', wp: 'nflfastR wp', vegas_wp: 'nflfastR vegas_wp', espn: 'ESPN', espn_wp: 'ESPN' };
-const COL = { model_ratings_only: '#bc8cff', market_ml: '#58a6ff', market_spread: '#79c0ff', ours: '#c8834a', model: '#c8834a', game_model: '#c8834a', ours_common: '#c8834a', market: '#58a6ff', close: '#58a6ff', closing: '#58a6ff', closing_line: '#58a6ff', open: '#79c0ff',
-  ratings: '#bc8cff', elo: '#bc8cff', baseline: '#8b949e', home: '#6e7681', blend_50: '#3fb950', nflfastr: '#58a6ff', nflfastr_wp: '#58a6ff', wp: '#58a6ff', nflfastr_vegas_wp: '#39d0d8', vegas_wp: '#39d0d8', espn: '#8b949e', espn_wp: '#8b949e' };
+const COL = { model_ratings_only: '#c95ac9', market_ml: '#e8833a', market_spread: '#e3b341', ours: '#3987e5', model: '#3987e5', game_model: '#3987e5', ours_common: '#3987e5', market: '#e8833a', close: '#e8833a', closing: '#e8833a', closing_line: '#e8833a', open: '#e3b341',
+  ratings: '#c95ac9', elo: '#c95ac9', baseline: '#8b949e', home: '#6e7681', blend_50: '#2fb37b', nflfastr: '#e8833a', nflfastr_wp: '#e8833a', wp: '#e8833a', nflfastr_vegas_wp: '#46b9c9', vegas_wp: '#46b9c9', espn: '#8b949e', espn_wp: '#8b949e' };
 const lab = m => LAB[m] || K().titleCase(m);
 const isOurs = m => /^(ours|model|game_model)$/.test(m);
 const isScorer = v => v && typeof v === 'object' && !Array.isArray(v) && (K().isNum(v.logloss) || K().isNum(v.brier) || K().isNum(v.mae));
@@ -90,7 +90,7 @@ function gamesSection(d, out, read) {
   const ALL = scorers(G.metrics || (G.pooled || {}).win || G.pooled), VM = scorers(G.metrics_vs_market || {});
   const seasons = (G.seasons || Object.keys(G.per_season || {})).map(String).filter(s => /^\d{4}$/.test(s)).sort();
   const m = VM.model || ALL.model, mk = VM.market_ml || ALL.market_ml;
-  let h = '<div class="card"><div class="card-header">The game model against the closing line <span class="card-sub">Walk-forward' + (seasons.length ? ' ' + seasons[0] + '–' + seasons[seasons.length - 1] : '') +
+  let h = '<div class="qk-card gi-ocard"><div class="gi-ohead">The game model against the closing line <span class="qk-card-sub">Walk-forward' + (seasons.length ? ' ' + seasons[0] + '–' + seasons[seasons.length - 1] : '') +
     ': team strength refitted before every week from earlier games only, the game model\'s coefficients refitted on earlier rows; y = 1 when the home team wins' + (k.isNum(G.ties_excluded) ? ' (' + G.ties_excluded + ' ties left out)' : '') + '.</span><span class="gq-ctl"><select id="cal-scope"><option value="vm">games with a closing moneyline</option><option value="all">every game</option>' + seasons.slice().reverse().map(s => '<option value="s' + s + '">' + s + '</option>').join('') + '</select></span></div>';
   h += k.tiles([k.tile('Games scored', k.int(G.games || (ALL.model || {}).n), seasons.length ? seasons.length + ' seasons' : ''),
     m ? k.tile('Model log-loss', k.num(m.logloss, 4), 'Brier ' + k.num(m.brier, 4) + ' · same games as the close') : '',
@@ -98,12 +98,12 @@ function gamesSection(d, out, read) {
     k.isNum((G.margin_rmse || {}).model_on_line_games) ? k.tile('Margin RMSE', k.num(G.margin_rmse.model_on_line_games, 2), 'closing spread ' + k.num(G.margin_rmse.market_line, 2) + ' points') : '',
     k.tile('Coin flip', k.num(Math.LN2, 4), 'log-loss of 50/50')]);
   h += '<div class="gq-pad" id="cal-table"></div>';
-  h += '<div class="grid-2"><div><div class="gq-sub-head">Reliability: who wins</div><div id="cal-rel" class="gf-chart"></div></div><div><div class="gq-sub-head">Log-loss by season</div><div id="cal-years" class="gf-chart"></div></div></div>';
+  h += '<div class="gi-o2"><div><div class="gq-sub-head">Reliability: who wins</div><div id="cal-rel" class="gi-chart"></div></div><div><div class="gq-sub-head">Log-loss by season</div><div id="cal-years" class="gi-chart"></div></div></div>';
   const books = G.books || {};
   if (Object.keys(books).length) h += '<div class="gq-sub-head">ESPN closing lines by book (2017 on), each against the model on the same games</div><div id="cal-books"></div>';
-  h += '<div class="grid-2"><div><div class="gq-sub-head">Against the spread: P(home covers the closing spread)</div><div id="cal-ats"></div><div id="cal-ats-c" class="gf-chart"></div></div>' +
-    '<div><div class="gq-sub-head">Totals: P(over the closing total)</div><div id="cal-tot"></div><div id="cal-tot-c" class="gf-chart"></div></div></div>';
-  if (G.hfa_by_season && Object.keys(G.hfa_by_season).length > 2) h += '<div class="gq-sub-head">Home-field advantage by season (points, fitted)</div><div id="cal-hfa" class="gf-chart"></div>';
+  h += '<div class="gi-o2"><div><div class="gq-sub-head">Against the spread: P(home covers the closing spread)</div><div id="cal-ats"></div><div id="cal-ats-c" class="gi-chart"></div></div>' +
+    '<div><div class="gq-sub-head">Totals: P(over the closing total)</div><div id="cal-tot"></div><div id="cal-tot-c" class="gi-chart"></div></div></div>';
+  if (G.hfa_by_season && Object.keys(G.hfa_by_season).length > 2) h += '<div class="gq-sub-head">Home-field advantage by season (points, fitted)</div><div id="cal-hfa" class="gi-chart"></div>';
   h += '</div>';
   out.push(h);
   if (m && mk && k.isNum(m.logloss) && k.isNum(mk.logloss)) {
@@ -134,8 +134,8 @@ function gamesSection(d, out, read) {
     const node = k.$('cal-years'), PS = G.per_season || {};
     if (node && seasons.length > 1) {
       const names = Object.keys(ALL);
-      k.plot(node, names.map(x => ({ type: 'scatter', mode: 'lines+markers', name: lab(x), x: seasons, y: seasons.map(s => ((PS[s] || {})[x] || {}).logloss), line: { color: COL[x] || '#8b949e', width: 2, dash: /market/.test(x) ? 'dot' : 'solid' }, connectgaps: false }))
-        .concat([{ type: 'scatter', mode: 'lines', name: 'Coin', x: seasons, y: seasons.map(() => Math.LN2), line: { color: '#6e7681', dash: 'dot', width: 1 } }]), k.layout(Object.assign({ margin: { l: 56, r: 10, t: 30, b: 36 }, yaxis: { title: 'Log-loss', tickformat: '.3f' }, xaxis: { type: 'category' } }, k.legendTop())));
+      GI.ch.lines(node, names.map(x => ({ name: lab(x), x: seasons.map(Number), y: seasons.map(s => ((PS[s] || {})[x] || {}).logloss), colour: COL[x] || null, dash: /market/.test(x), symbol: true }))
+        .concat([{ name: 'Coin', x: seasons.map(Number), y: seasons.map(() => Math.LN2), colour: '#7d8590', dash: true }]), { yFmt: v => GI.num(v, 3), xFmt: String, xLabel: String, yName: 'Log-loss' });
     } else if (node) { node.innerHTML = k.muted('One season only.'); node.style.height = 'auto'; }
     if (Object.keys(books).length) {
       k.set('cal-books', k.table([{ label: 'Book' }, { label: 'Games', align: 'right' }, { label: 'Book log-loss', align: 'right' }, { label: 'Model, same games', align: 'right' }, { label: 'Model v book', sortable: false }],
@@ -144,7 +144,7 @@ function gamesSection(d, out, read) {
     }
     side('cal-ats', 'cal-ats-c', G.ats, 'covers', [], 'Against the spread');
     side('cal-tot', 'cal-tot-c', G.totals, 'overs', [], 'Totals');
-    if (G.hfa_by_season && k.$('cal-hfa')) { const xs = Object.keys(G.hfa_by_season).sort(); k.plot('cal-hfa', [{ type: 'scatter', mode: 'lines+markers', x: xs, y: xs.map(s => G.hfa_by_season[s]), line: { color: k.ACC, width: 2 }, hovertemplate: '%{x}: %{y:.2f} points<extra></extra>' }], k.layout({ margin: { l: 50, r: 10, t: 10, b: 36 }, yaxis: { title: 'Points', rangemode: 'tozero' }, xaxis: { type: 'category' } })); }
+    if (G.hfa_by_season && k.$('cal-hfa')) { const xs = Object.keys(G.hfa_by_season).sort(); GI.ch.lines('cal-hfa', [{ name: 'Home-field advantage', x: xs.map(Number), y: xs.map(s => G.hfa_by_season[s]), symbol: true, area: true }], { legend: false, yFmt: v => GI.num(v, 1) + ' pts', xFmt: String, xLabel: String, yMin: 0 }); }
   }, 0);
 }
 function note(x) { return x && x.note ? '<div class="pg-note gq-note">' + K().esc(x.note) + '</div>' : ''; }
@@ -164,7 +164,7 @@ function side(id, cid, A, what, read, title, textOnly) {
   if (!textOnly) {
   k.set(id, h.replace('kpi-grid gq-tiles', 'kpi-grid gq-tiles gq-tiles-3'));
   const bins = binsOf(A);
-  if (bins.length) k.reliability(cid, [{ name: title, colour: '#c8834a', bins: bins }], { xt: 'Model probability', yt: 'Observed rate', minN: 20, min: 0.2, max: 0.8 });
+  if (bins.length) k.reliability(cid, [{ name: title, colour: '#3987e5', bins: bins }], { xt: 'Model probability', yt: 'Observed rate', minN: 20, min: 0.2, max: 0.8 });
   else { const n = k.$(cid); if (n) n.style.display = 'none'; }
   }
   read.push('<p><strong>' + title + '.</strong> Against the closing ' + (what === 'covers' ? 'spread' : 'total') + ', the model\'s probability scores ' + k.num(A.logloss, 4) + ' against a coin\'s ' + k.num(coin, 4) + ' over ' + k.int(A.n) + ' games: ' +
@@ -181,11 +181,11 @@ function seasonOdds(d, out, read) {
   const NAME = { playoffs: 'Make the playoffs', div: 'Win the division', bye: 'Earn the bye (1 seed)', conf: 'Reach the Super Bowl', sb: 'Win the Super Bowl' };
   const rows = {};
   Object.keys(M).forEach(x => { if (isScorer(M[x])) rows[x] = scorers({ x: M[x] }).x; });
-  let h = '<div class="card"><div class="card-header">Season odds <span class="card-sub">' + (X.n_sims ? k.int(X.n_sims) + ' simulations' : 'Simulations') + ' run before weeks ' + (X.check_weeks || [1, 5, 10, 14]).join(', ') + ' of each completed season with ratings and coefficients fitted strictly before, scored against what happened. Base-rate log-loss (always forecasting the league share) is the bar to beat.</span></div><div class="gq-pad">';
+  let h = '<div class="qk-card gi-ocard"><div class="gi-ohead">Season odds <span class="qk-card-sub">' + (X.n_sims ? k.int(X.n_sims) + ' simulations' : 'Simulations') + ' run before weeks ' + (X.check_weeks || [1, 5, 10, 14]).join(', ') + ' of each completed season with ratings and coefficients fitted strictly before, scored against what happened. Base-rate log-loss (always forecasting the league share) is the bar to beat.</span></div><div class="gq-pad">';
   h += k.table([{ label: 'Market' }, { label: 'Team-checkpoints', align: 'right' }, { label: 'Log-loss', align: 'right' }, { label: 'Base rate', align: 'right', title: 'Log-loss of always forecasting the share that happened' }, { label: 'Brier', align: 'right' }, { label: 'v base rate', sortable: false }].concat((X.check_weeks || []).map(w => ({ label: 'Week ' + w, align: 'right' }))),
     Object.keys(rows).map(x => { const r = M[x], b = r.base_rate, H = k.isNum(b) && b > 0 && b < 1 ? -(b * Math.log(b) + (1 - b) * Math.log(1 - b)) : null;
       return [{ v: x, html: '<strong>' + k.esc(NAME[x] || lab(x)) + '</strong>' }, { v: r.n, html: k.int(r.n) }, { v: r.logloss, html: k.num(r.logloss, 4) }, { v: H, html: k.num(H, 4) }, { v: r.brier, html: k.num(r.brier, 4) }, { v: '', html: H ? vchip(verdict(r.logloss, H, true)) : '' }]
-        .concat((X.check_weeks || []).map(w => ({ v: ((r.by_week || {})[String(w)] || {}).logloss, html: k.num(((r.by_week || {})[String(w)] || {}).logloss, 4) }))); }), { compact: true }) + '</div><div id="cal-so" class="gf-chart"></div></div>';
+        .concat((X.check_weeks || []).map(w => ({ v: ((r.by_week || {})[String(w)] || {}).logloss, html: k.num(((r.by_week || {})[String(w)] || {}).logloss, 4) }))); }), { compact: true }) + '</div><div id="cal-so" class="gi-chart"></div></div>';
   out.push(h);
   const pl = M.playoffs;
   if (pl && k.isNum(pl.logloss) && k.isNum(pl.base_rate)) { const b = pl.base_rate, H = -(b * Math.log(b) + (1 - b) * Math.log(1 - b)); read.push('<p><strong>Season odds.</strong> Playoff odds score ' + k.num(pl.logloss, 4) + ' against ' + k.num(H, 4) + ' for the base rate over ' + k.int(pl.n) + ' team-checkpoints (' + ({ tie: 'a tie', win: 'better', lose: 'worse' })[verdict(pl.logloss, H, true)] + '); the gain grows as the season goes on and the standings fill in.</p>'); }
@@ -201,7 +201,7 @@ function playModels(d, out, read) {
   const EP = get(d, ['ep', 'ep_wp.ep', 'models.ep', 'play_models.ep', 'validation.ep']);
   const WP = get(d, ['wp', 'ep_wp.wp', 'models.wp', 'play_models.wp', 'validation.wp']);
   if (!EP && !WP) { out.push(k.card('Expected points and win probability against nflfastR', '', k.muted('The comparison of our EP and WP models with nflfastR\'s published values is not in this build yet.'))); return; }
-  let h = '<div class="card"><div class="card-header">Expected points and win probability against nflfastR <span class="card-sub">Our models (cross-fitted: no play is scored by a model that saw it) against nflfastR\'s published values on the same plays, 1999 on. nflfastR\'s models were fitted on 1999–2019, so its numbers on those seasons are in-sample and flatter it.</span></div>';
+  let h = '<div class="qk-card gi-ocard"><div class="gi-ohead">Expected points and win probability against nflfastR <span class="qk-card-sub">Our models (cross-fitted: no play is scored by a model that saw it) against nflfastR\'s published values on the same plays, 1999 on. nflfastR\'s models were fitted on 1999–2019, so its numbers on those seasons are in-sample and flatter it.</span></div>';
   const SPLITS = [['all', 'All seasons'], ['pre_2020', '1999–2019 (nflfastR in-sample)'], ['from_2020', '2020 on (out of sample for both)']];
   const one = (X, title, kind) => {
     if (!X) return '';
@@ -217,8 +217,8 @@ function playModels(d, out, read) {
     return s;
   };
   h += '<div class="gq-pad">' + one(EP, 'Expected points: the next scoring event', 'ep') + one(WP, 'Win probability', 'wp') + '</div>';
-  h += '<div class="grid-2"><div><div class="gq-sub-head">Win probability reliability</div><div id="cal-wp-rel" class="gf-chart"></div></div><div><div class="gq-sub-head">Win-probability log-loss by season</div><div id="cal-wp-yr" class="gf-chart"></div></div></div>';
-  h += '<div class="grid-2"><div><div class="gq-sub-head">EP calibration: predicted against the realised next score</div><div id="cal-ep-rel" class="gf-chart"></div></div><div><div class="gq-sub-head">Win-probability log-loss by quarter</div><div id="cal-wp-q" class="gf-chart"></div></div></div></div>';
+  h += '<div class="gi-o2"><div><div class="gq-sub-head">Win probability reliability</div><div id="cal-wp-rel" class="gi-chart"></div></div><div><div class="gq-sub-head">Win-probability log-loss by season</div><div id="cal-wp-yr" class="gi-chart"></div></div></div>';
+  h += '<div class="gi-o2"><div><div class="gq-sub-head">EP calibration: predicted against the realised next score</div><div id="cal-ep-rel" class="gi-chart"></div></div><div><div class="gq-sub-head">Win-probability log-loss by quarter</div><div id="cal-wp-q" class="gi-chart"></div></div></div></div>';
   out.push(h);
   // reading
   const wa = (WP || {}).all || {}, ea = (EP || {}).all || {}, ef = (EP || {}).from_2020 || {}, wf = (WP || {}).from_2020 || {};
@@ -242,9 +242,10 @@ function playModels(d, out, read) {
     if (eb && (eb.bins || []).length) {
       const pts = b => (b.bins || []).map(r => (Array.isArray(r) ? { x: r[1], y: r[2], n: r[3] } : r));
       const lo = -3, hi = 7;
-      const tr = [{ type: 'scatter', mode: 'lines', x: [lo, hi], y: [lo, hi], line: { color: '#6e7681', dash: 'dot', width: 1 }, hoverinfo: 'skip', showlegend: false }];
-      [[eb, 'Ours', '#c8834a'], [enf, 'nflfastR', '#58a6ff']].forEach(z => { if (z[0] && (z[0].bins || []).length) { const p = pts(z[0]); tr.push({ type: 'scatter', mode: 'lines+markers', name: z[1], x: p.map(r => r.x), y: p.map(r => r.y), line: { color: z[2], width: 1.5 }, marker: { size: 7 }, hovertemplate: z[1] + ': EP %{x:.2f}, realised %{y:.2f}<extra></extra>' }); } });
-      k.plot('cal-ep-rel', tr, k.layout(Object.assign({ margin: { l: 50, r: 10, t: 30, b: 40 }, xaxis: { title: 'Predicted EP', range: [lo, hi] }, yaxis: { title: 'Realised next-score value', range: [lo, hi] } }, k.legendTop())));
+      const tr = [];
+      [[eb, 'Ours', '#3987e5'], [enf, 'nflfastR', '#e8833a']].forEach(z => { if (z[0] && (z[0].bins || []).length) { const p = pts(z[0]); tr.push({ name: z[1], x: p.map(r => r.x), y: p.map(r => r.y), colour: z[2], symbol: true }); } });
+      tr.push({ name: 'Perfect', x: [lo, hi], y: [lo, hi], colour: '#7d8590', dash: true, width: 1 });
+      GI.ch.lines('cal-ep-rel', tr, { xMin: lo, xMax: hi, yMin: lo, yMax: hi, xName: 'Predicted EP', yFmt: v => GI.num(v, 1), xFmt: v => GI.num(v, 0) });
     } else k.set('cal-ep-rel', k.muted('Not published.'));
   }, 0);
 }
@@ -257,8 +258,8 @@ function bySeries(id, obj, isSeason) {
   const xs = Object.keys(obj).sort((a, b) => Number(a) - Number(b));
   const names = [];
   xs.forEach(x => Object.keys(obj[x] || {}).forEach(m => { if (m !== 'n' && k.isNum(obj[x][m]) && names.indexOf(m) < 0) names.push(m); }));
-  k.plot(node, names.map(m => ({ type: 'scatter', mode: isSeason ? 'lines+markers' : 'lines+markers', name: lab(m), x: xs.map(x => (isSeason ? x : (Number(x) > 4 ? 'OT' : 'Q' + x))), y: xs.map(x => (obj[x] || {})[m]), line: { color: COL[m] || '#8b949e', width: 2, dash: m === 'wp' ? 'dot' : 'solid' } })),
-    k.layout(Object.assign({ margin: { l: 56, r: 10, t: 30, b: 36 }, yaxis: { title: 'Log-loss', tickformat: '.3f' }, xaxis: { type: 'category' } }, k.legendTop())));
+  GI.ch.lines(node, names.map(m => ({ name: lab(m), x: xs.map(Number), y: xs.map(x => (obj[x] || {})[m]), colour: COL[m] || null, dash: m === 'wp', symbol: true })),
+    { yFmt: v => GI.num(v, 3), xFmt: x => (isSeason ? String(x) : (Number(x) > 4 ? 'OT' : 'Q' + x)), xLabel: x => (isSeason ? String(x) : (Number(x) > 4 ? 'OT' : 'Q' + x)), yName: 'Log-loss' });
 }
 
 function fourthSection(d, out, read) {
@@ -267,13 +268,13 @@ function fourthSection(d, out, read) {
   if (!F) return;
   const C = F.calibration_4th || F.conversion || F;
   const bins = binsOf(C);
-  let h = '<div class="card"><div class="card-header">Fourth-down conversions <span class="card-sub">The conversion model behind every go-for-it valuation: predicted against actual conversion rates on fourth downs where teams went for it.</span></div>';
+  let h = '<div class="qk-card gi-ocard"><div class="gi-ohead">Fourth-down conversions <span class="qk-card-sub">The conversion model behind every go-for-it valuation: predicted against actual conversion rates on fourth downs where teams went for it.</span></div>';
   h += k.tiles([k.tile('Attempts', k.int(k.first(C.n)), ''), k.tile('Log-loss', k.num(C.logloss, 4), k.isNum(C.logloss_base_rate) ? 'base rate ' + k.num(C.logloss_base_rate, 4) : ''), k.tile('ECE', k.num(C.ece, 4), 'calibration error')]);
-  h += '<div class="grid-2"><div id="cal-4c" class="gf-chart"></div><div id="cal-4t"></div></div></div>';
+  h += '<div class="gi-o2"><div id="cal-4c" class="gi-chart"></div><div id="cal-4t"></div></div></div>';
   out.push(h);
   if (k.isNum(C.logloss) && k.isNum(C.logloss_base_rate)) read.push('<p><strong>Fourth-down conversions.</strong> On ' + k.int(C.n) + ' attempts the conversion model scores ' + k.num(C.logloss, 4) + ' against ' + k.num(C.logloss_base_rate, 4) + ' for the league\'s base rate (' + (verdict(C.logloss, C.logloss_base_rate, true) === 'win' ? 'better' : verdict(C.logloss, C.logloss_base_rate, true) === 'tie' ? 'a tie' : 'worse') + '), with a calibration error of ' + k.num(100 * (C.ece || 0), 1) + ' points.</p>');
   setTimeout(() => {
-    if (bins.length) k.reliability('cal-4c', [{ name: 'Conversion model', colour: '#c8834a', bins: bins }], { xt: 'Predicted P(convert)', yt: 'Converted', minN: 20 }); else k.set('cal-4c', '');
+    if (bins.length) k.reliability('cal-4c', [{ name: 'Conversion model', colour: '#3987e5', bins: bins }], { xt: 'Predicted P(convert)', yt: 'Converted', minN: 20 }); else k.set('cal-4c', '');
     const T = C.by_togo || C.by_distance;
     if (T) k.set('cal-4t', k.table([{ label: 'Yards to go' }, { label: 'n', align: 'right' }, { label: 'Predicted', align: 'right' }, { label: 'Actual', align: 'right' }],
       Object.keys(T).map(x => [{ v: x, html: k.esc(x.replace(/^(\d+)-\1$/, '$1').replace('-99', '+')) }, { v: T[x].n, html: k.int(T[x].n) }, { v: T[x].pred, html: k.pct(T[x].pred, 1) }, { v: T[x].obs, html: k.pct(T[x].obs, 1) }]), { compact: true }));
@@ -287,7 +288,7 @@ function render(el) {
     if (!k.alive(el)) return;
     const ok = d && d.ok !== false;
     const out = [], read = [];
-    let h = '<div class="card"><div class="card-header">Calibration <span class="card-sub">Does the modelling hold up? Every number below is computed out of sample, and every comparison is with the best public alternative.' + (d && (d.generated_at || d.updated_at) ? ' Generated ' + k.esc(k.fmtDate(d.generated_at || d.updated_at, { year: true })) + '.' : '') + '</span></div>';
+    let h = '<div class="qk-card gi-ocard"><div class="gi-ohead">Calibration <span class="qk-card-sub">Does the modelling hold up? Every number below is computed out of sample, and every comparison is with the best public alternative.' + (d && (d.generated_at || d.updated_at) ? ' Generated ' + k.esc(k.fmtDate(d.generated_at || d.updated_at, { year: true })) + '.' : '') + '</span></div>';
     if (!ok) h += '<div class="gq-read"><p>The backtest has not been published yet' + (d && d.reason ? ' (' + k.esc(String(d.reason).replace(/builder [A-Z]'s /gi, 'the ')) + ')' : '') + '. When it is, this page scores the game model against the closing spread and moneyline from 2006, against-the-spread calibration, totals and season odds, and compares our expected points and win probability with nflfastR\'s. Ties will be reported as ties.</p></div>';
     h += '<div class="card-sub-wrap"></div></div>';
     if (ok) {
@@ -296,11 +297,11 @@ function render(el) {
       playModels(d, out, read);
       fourthSection(d, out, read);
     }
-    el.innerHTML = h + (ok ? '<div class="card"><div class="card-header">What it shows <span class="card-sub">Written from the numbers on this page; a gap smaller than the noise is called a tie.</span></div><div class="gq-read" id="cal-read"></div></div>' : '') + out.join('') +
-      '<div class="card"><div class="card-header">How to read it</div><div class="gq-read"><p><strong>Log-loss</strong> is −mean(y ln p + (1 − y) ln(1 − p)), lower is better; a coin scores ln 2 = 0.6931. <strong>Brier</strong> is mean((p − y)²). <strong>Reliability</strong> bins forecasts and plots the average forecast against how often the event happened; a calibrated model sits on the diagonal. <strong>MAE</strong> is the mean absolute error in points. A difference is called a <strong>tie</strong> when it is within two standard errors (or 0.1% of the score when no standard error is published). Beating a closing line is rare; being close to it is the realistic goal. See the <a href="#/methodology/backtest">methodology</a>.</p></div></div>';
+    el.innerHTML = h + (ok ? '<div class="qk-card gi-ocard"><div class="gi-ohead">What it shows <span class="qk-card-sub">Written from the numbers on this page; a gap smaller than the noise is called a tie.</span></div><div class="gq-read" id="cal-read"></div></div>' : '') + out.join('') +
+      '<div class="qk-card gi-ocard"><div class="gi-ohead">How to read it</div><div class="gq-read"><p><strong>Log-loss</strong> is −mean(y ln p + (1 − y) ln(1 − p)), lower is better; a coin scores ln 2 = 0.6931. <strong>Brier</strong> is mean((p − y)²). <strong>Reliability</strong> bins forecasts and plots the average forecast against how often the event happened; a calibrated model sits on the diagonal. <strong>MAE</strong> is the mean absolute error in points. A difference is called a <strong>tie</strong> when it is within two standard errors (or 0.1% of the score when no standard error is published). Beating a closing line is rare; being close to it is the realistic goal. See the <a href="#/methodology/backtest">methodology</a>.</p></div></div>';
     if (ok) k.set('cal-read', read.join('') || '<p>Not enough scored games for a reading yet.</p>');
   });
 }
 
-if (typeof GI.route === 'function') { try { GI.route('calibration', render); } catch (e) { /* bound */ } }
-})(window.GI || (window.GI = {}));
+GI.route('calibration', function (el, params) { el.innerHTML = GI.pageHead('Model', 'Calibration', 'Does the modelling hold up? Out-of-sample scores against the closing line and the best public alternatives.') + GI.sectionNav('model', 'calibration') + '<div id="cal-root" class="gi-page"></div>'; return render(el.querySelector('#cal-root')).then(() => { GI.sortable(el); }); });
+})(window.GI);
